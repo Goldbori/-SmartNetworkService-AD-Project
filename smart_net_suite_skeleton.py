@@ -4,6 +4,9 @@
 # - 각 TODO 지점에 구현을 채워 넣으세요.
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
+import subprocess   #ipconfig를 사용하기 위함.
+import platform     #윈도우, 맥/리눅스 구별하기 위함.
+
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -67,7 +70,20 @@ class App(tk.Tk):
     def log_diag(self, s): self._append(self.out_diag, s)
 
 # ---- 진단 스켈레톤 핸들러 (구현 지점) ----
-    def do_ipconfig(self): self._todo("IP 구성 확인 실행", area="diag")
+    def do_ipconfig(self):# self._todo("IP 구성 확인 실행", area="diag")
+        os_name = platform.system().lower()
+
+        if "windows" in os_name:    #Window인 경우
+            self._append(self.out_diag, "$ ipconfig /all")
+            cmd = "ipconfig /all"
+        else:                       #Mac/Linux인 경우
+            self._append(self.out_diag, "$ ifconfig -a")
+            cmd = "ifconfig -a"
+
+        result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text = True)
+
+        self._append(self.out_diag, result.stdout)
+
     def do_netstat(self): self._todo(f"netstat 필터: {self.var_netstat.get()}", area="diag")
     def do_check_port(self): self._todo(f"포트 검사: {self.var_host.get()}:{self.var_port.get()}", area="diag")
     def do_hton(self): self._todo("hton/ntoh 데모", area="diag")
