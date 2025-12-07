@@ -128,7 +128,7 @@ class App(tk.Tk):
         
         x = 12345  # 테스트용 값
 
-        self.log_diag(f"[hton/ntoh 데모] 입력값: {x} (0x{x:04x})")
+        self.log_diag(f"[hton/ntoh 데모] 입력값: {x} (0x{x:04x})\n")
 
         # 16비트
         h2n16 = socket.htons(x)
@@ -140,11 +140,34 @@ class App(tk.Tk):
 
         # 64비트 (struct 필요)
         net64 = struct.pack(">Q", x)     # big-endian
-        self.log_diag(f" [64비트] net64 = {net64.hex()}")
+        self.log_diag(f" [64비트] net64 = {net64.hex()}\n")
 
 
-    def do_inet4(self): self._todo(f"inet_pton/ntop IPv4: {self.var_ipv4.get()}", area="diag")
-    def do_inet6(self): self._todo(f"inet_pton/ntop IPv6: {self.var_ipv6.get()}", area="diag")
+    def do_inet4(self): #self._todo(f"inet_pton/ntop IPv4: {self.var_ipv4.get()}", area="diag")
+        ipv4 = self.var_ipv4.get()
+        try:
+            packed = socket.inet_pton(socket.AF_INET, ipv4)
+            unpacked = socket.inet_ntop(socket.AF_INET, packed)
+
+            self.log_diag(f"[inet_pton/ntop IPv4] 입력={ipv4}\n")
+            self.log_diag(f"  pton → {packed.hex()}")
+            self.log_diag(f"  ntop → {unpacked}\n")
+
+        except Exception as e:
+            self.log_diag(f"[ERROR] IPv4 변환 실패: {e}\n")
+
+    def do_inet6(self): #self._todo(f"inet_pton/ntop IPv6: {self.var_ipv6.get()}", area="diag")
+        ipv6 = self.var_ipv6.get()
+        try:
+            packed = socket.inet_pton(socket.AF_INET6, ipv6)
+            unpacked = socket.inet_ntop(socket.AF_INET6, packed)
+
+            self.log_diag(f"[inet_pton/ntop IPv6] 입력={ipv6}\n")
+            self.log_diag(f"  pton → {packed.hex()}")
+            self.log_diag(f"  ntop → {unpacked}\n")
+
+        except Exception as e:
+            self.log_diag(f"[ERROR] IPv6 변환 실패: {e}\n")
 
     def do_dns(self): #self._todo(f"DNS 조회: {self.var_dns.get()}", area="diag")
         dn = self.var_dns.get()
