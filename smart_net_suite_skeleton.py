@@ -4,9 +4,10 @@
 # - 각 TODO 지점에 구현을 채워 넣으세요.
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
-import subprocess   #ipconfig를 사용하기 위함.
-import platform     #윈도우, 맥/리눅스 구별하기 위함.
-import socket       #소켓함수 사용.
+import subprocess   # ipconfig 사용
+import platform     # 윈도우, 맥/리눅스 구별
+import socket       # 소켓함수 사용
+import struct       # 64비트 변환
 
 class App(tk.Tk):
     def __init__(self):
@@ -123,7 +124,25 @@ class App(tk.Tk):
             sock.close()    # 임시소켓 해제
 
 
-    def do_hton(self): self._todo("hton/ntoh 데모", area="diag")
+    def do_hton(self): #self._todo("hton/ntoh 데모", area="diag")
+        
+        x = 12345  # 테스트용 값
+
+        self.log_diag(f"[hton/ntoh 데모] 입력값: {x} (0x{x:04x})")
+
+        # 16비트
+        h2n16 = socket.htons(x)
+        self.log_diag(f" [16비트] host→net = 0x{h2n16:04x}")
+
+        # 32비트
+        h2n32 = socket.htonl(x)
+        self.log_diag(f" [32비트] host→net = 0x{h2n32:08x}")
+
+        # 64비트 (struct 필요)
+        net64 = struct.pack(">Q", x)     # big-endian
+        self.log_diag(f" [64비트] net64 = {net64.hex()}")
+
+
     def do_inet4(self): self._todo(f"inet_pton/ntop IPv4: {self.var_ipv4.get()}", area="diag")
     def do_inet6(self): self._todo(f"inet_pton/ntop IPv6: {self.var_ipv6.get()}", area="diag")
 
