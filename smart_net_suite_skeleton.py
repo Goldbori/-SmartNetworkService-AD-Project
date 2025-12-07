@@ -71,21 +71,21 @@ class App(tk.Tk):
     def log_diag(self, s): self._append(self.out_diag, s)
 
 # ---- 진단 스켈레톤 핸들러 (구현 지점) ----
-    #구현완료
-    def do_ipconfig(self):# self._todo("IP 구성 확인 실행", area="diag")
+    # 구현완료
+    def do_ipconfig(self): #self._todo("IP 구성 확인 실행", area="diag")
         os_name = platform.system().lower()
 
         if "windows" in os_name:    #Window인 경우
-            self._append(self.out_diag, "$ ipconfig /all")
+            self.log_diag("$ ipconfig /all")
             cmd = "ipconfig /all"
         else:                       #Mac/Linux인 경우
-            self._append(self.out_diag, "$ ifconfig -a")
+            self.log_diag("$ ifconfig -a")
             cmd = "ifconfig -a"
 
         result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text = True)
+        self.log_diag(result.stdout)
 
-        self._append(self.out_diag, result.stdout)
-    #구현완료
+    # 구현완료
     def do_netstat(self): #self._todo(f"netstat 필터: {self.var_netstat.get()}", area="diag")
 
         netstat_filter = self.var_netstat.get()
@@ -95,31 +95,32 @@ class App(tk.Tk):
 
         if "windows" in os_name:
             cmd += "findstr " + netstat_filter
-            self._append(self.out_diag, "$" + cmd + '\n')
+            self.log_diag("$" + cmd + '\n')
         else:
             cmd += "grep " + netstat_filter
-            self._append(self.out_diag, "$" + cmd + '\n')
+            self.log_diag("$" + cmd + '\n')
 
         result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text = True)
-        self._append(self.out_diag, result.stdout)
-    #구현완료 time-out 감지형태로 만들어놓음
+        self.log_diag(result.stdout)
+
+    # 구현완료 time-out 감지형태로 만들어놓음
     def do_check_port(self): #self._todo(f"포트 검사: {self.var_host.get()}:{self.var_port.get()}", area="diag")
         host = self.var_host.get()
         port = int(self.var_port.get())
 
-        self._append(self.out_diag, f"해당 포트를 검사합니다. {host}:{port}\n")
+        self.log_diag(f"해당 포트를 검사합니다. {host}:{port}\n")
 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)    #임시 소켓 생성
-        sock.settimeout(1)  #1초로 설정
-        try:    #소켓 연결 시도 -> 예외띄우면 닫혀있거나 막힌 것으로 판단.
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)    # 임시 소켓 생성
+        sock.settimeout(1)  # 1초로 설정
+        try:    # 소켓 연결 시도 -> 예외 띄우면 닫혀있거나 막힌 것으로 판단
             sock.connect((host, port))
-            self._append(self.out_diag, f"[Success] : Listening on {host}:{port}\n")
+            self.log_diag(f"[Success] : Listening on {host}:{port}\n")
 
         except Exception as e:
-            self._append(self.out_diag, "[FAIL] : " + str(e) + "\n")
+            self.log_diag("[FAIL] : " + str(e) + "\n")
 
         finally:
-            sock.close()    #임시소켓 해제
+            sock.close()    # 임시소켓 해제
 
 
     def do_hton(self): self._todo("hton/ntoh 데모", area="diag")
@@ -129,17 +130,18 @@ class App(tk.Tk):
     def do_dns(self): #self._todo(f"DNS 조회: {self.var_dns.get()}", area="diag")
         dn = self.var_dns.get()
         cmd = "nslookup " + dn
-        self._append(self.out_diag, f"$ {cmd}\n")
+        self.log_diag(f"$ {cmd}\n")
         result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text = True)
-        self._append(self.out_diag, result.stdout)
+        self.log_diag(result.stdout)
 
 
     def do_reverse(self): #self._todo(f"역방향 조회: {self.var_rev.get()}", area="diag")
         addr = self.var_rev.get()
         cmd = "nslookup " + addr
-        self._append(self.out_diag, f"$ {cmd}\n")
+        self.log_diag(f"$ {cmd}\n")
         result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text=True)
-        self._append(self.out_diag, result.stdout)
+        self.log_diag(result.stdout)
+
 # ---------------- TCP 서버 ----------------
     def _build_server(self):
         top = ttk.Frame(self.pg_server, padding=8); top.pack(fill="x")
