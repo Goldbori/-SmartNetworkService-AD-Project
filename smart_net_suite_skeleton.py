@@ -17,8 +17,8 @@ class App(tk.Tk):
         self.geometry("1100x720")
         self.server_running = False
         self.client_connected = False
-        self.lock = threading.Lock()        # 공유 카운터 보호 
-        self.stop_event = threading.Event() # 안전 종료
+        self.counter_lock = threading.Lock() # 접속한 클라이언트의 수 (공유 카운터)
+        self.server_stop_event = threading.Event() # 안전 종료
         nb = ttk.Notebook(self); nb.pack(fill="both", expand=True)
         self.pg_diag = ttk.Frame(nb); nb.add(self.pg_diag, text="네트워크 진단")
         self.pg_server = ttk.Frame(nb); nb.add(self.pg_server, text="TCP 서버")
@@ -213,24 +213,25 @@ class App(tk.Tk):
         if self.server_running:
             return
         self.server_running = True
-        self.stop_event.clear()
+        self.server_stop_event.clear()
 
+        host = "0.0.0.0"
         port = int(self.var_srv_port.get())
         self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self.server_sock.bind(("0.0.0.0", port))
+        self.server_sock.bind((host, port))
         self.server_sock.listen()
 
         self.clients = [] # 접속한 클라이언트 소켓 리스트
         self.client_threads = [] # 접속한 클라이언트 스레드 리스트
-        self.counter_lock = 0 # 접속한 클라이언트의 수 (공유 카운터)
+        self.counter = 0
 
         threading.Thread(target=self.accept_loop).start()
         self.log_srv(f"[서버] 시작 @ {port}")
 
 
     def accept_loop(self):
-        while not self.stop_event.is_set():
+        while not self.server_stop_event.is_set():
             try:
                 client_sock, addr = self.server_sock.accept()
                 self.clients.append(client_sock)
@@ -241,14 +242,14 @@ class App(tk.Tk):
                 self.client_threads.append(t)
 
             except Exception as e:
-                if not self.stop_event.is_set():
+                if not self.server_stop_event.is_set():
                     self.log_srv(f"[Error] accept 실패: {e}")
                 break
 
 
     def server_recv(self, client_sock, addr):
         try:
-            while not self.stop_event.is_set():
+            while not self.server_stop_event.is_set():
                 data = client_sock.recv(1024)
                 if not data:
                     break
@@ -275,7 +276,7 @@ class App(tk.Tk):
             return
 
         self.server_running = False
-        self.stop_event.set()
+        self.server_stop_event.set()
 
         try:
             self.server_sock.close()
@@ -329,20 +330,108 @@ class App(tk.Tk):
 
 # ---- 클라이언트 스켈레톤 핸들러 (구현 지점) ----
     def cli_connect(self):
+        if self.client_connected:
+            return
+
         self.client_connected = True
-        self.log_cli(f"[클라] 연결 시도 → {self.var_cli_host.get()}:{self.var_cli_port.get()} (스켈레톤)")
+
+        host = self.var_cli_host.get()
+        port = int(self.var_cli_port.get())
+
+        self.client_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.client_sock.connect((host, port))
+
+        # --- recv 전용 스레드 시작 ---
+        self.cli_stop_event = threading.Event()
+        self.cli_thread = threading.Thread(target=self.cli_recv_loop, daemon=True)
+        self.cli_thread.start()
+
+        self.log_cli("[클라] 서버 연결 완료")
 # TODO: socket connect + recv 루프
+
+    def cli_recv_loop(self):
+        try:
+            while not self.cli_stop_event.is_set():
+                data = self.client_sock.recv(1024)
+                if not data:
+                    break
+                self.log_cli(f"[수신] {data.decode(errors='ignore')}")
+        except Exception as e:
+            self.log_cli(f"[클라 Error] 수신 실패: {e}")
+        finally:
+            self.cli_close()
 
 
     def cli_close(self):
+        # [구현 완료] close
+        if not self.client_connected:
+            return
+        
         self.client_connected = False
-        self.log_cli("[클라] 연결 해제 (스켈레톤)")
-# TODO: close
+
+        try:
+            if hasattr(self, 'cli_stop_event'):
+                self.cli_stop_event.set()
+        except:
+            pass
+
+        try:
+            self.client_sock.close()
+        except:
+            pass
+
+        self.log_cli("[클라] 연결 해제")
 
 
     def cli_send(self):
-        self.log_cli(f"[클라] 모드={self.var_mode.get()} 메시지='{self.var_msg.get()}' (스켈레톤)")
-# TODO: VAR/FIXED/MIX 전송 구현
+        # [구현 완료] VAR/FIXED/MIX 전송 구현
+        if not self.client_connected:
+            self.log_cli("[클라] 연결 안됨")
+            return
+        
+        mode = self.var_mode.get()
+        msg = self.var_msg.get()
+
+        if mode == "FIXED":
+            self.send_fixed(msg)
+        elif mode == "VAR":
+            self.send_var(msg)
+        elif mode == "MIX":
+            self.send_mix(msg)
+        else:
+            self.log_cli("[클라] 잘못된 모드")
+
+        self.log_cli(f"[클라] ({mode}) '{msg}' 전송 완료")
+
+        if self.var_after_close.get():
+            self.log_cli("[클라] 전송 후 즉시 연결 종료 옵션 활성화 → 클라이언트 종료")
+            self.cli_close()
+
+
+    def send_fixed(self, msg: str):
+        FIXED_LEN = 16
+
+        b = msg.encode()
+
+        if len(b) < FIXED_LEN:
+            b = b.ljust(FIXED_LEN, b' ')   # 패딩
+        else:
+            b = b[:FIXED_LEN]              # 자르기
+
+        self.client_sock.sendall(b)
+
+
+    def send_var(self, msg: str):
+        data = (msg + "\n").encode()
+        self.client_sock.sendall(data)
+
+
+    def send_mix(self, msg: str):
+        payload = msg.encode()
+        length = len(payload)
+
+        prefix = length.to_bytes(4, 'big')  # 4바이트
+        self.client_sock.sendall(prefix + payload)
 
 
 # ---------------- 버퍼/소켓 ----------------
