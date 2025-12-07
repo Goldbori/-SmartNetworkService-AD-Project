@@ -6,6 +6,7 @@ import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 import subprocess   #ipconfig를 사용하기 위함.
 import platform     #윈도우, 맥/리눅스 구별하기 위함.
+import socket       #소켓함수 사용.
 
 class App(tk.Tk):
     def __init__(self):
@@ -70,6 +71,7 @@ class App(tk.Tk):
     def log_diag(self, s): self._append(self.out_diag, s)
 
 # ---- 진단 스켈레톤 핸들러 (구현 지점) ----
+    #구현완료
     def do_ipconfig(self):# self._todo("IP 구성 확인 실행", area="diag")
         os_name = platform.system().lower()
 
@@ -83,7 +85,7 @@ class App(tk.Tk):
         result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text = True)
 
         self._append(self.out_diag, result.stdout)
-
+    #구현완료
     def do_netstat(self): #self._todo(f"netstat 필터: {self.var_netstat.get()}", area="diag")
 
         netstat_filter = self.var_netstat.get()
@@ -101,7 +103,25 @@ class App(tk.Tk):
         result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text = True)
         self._append(self.out_diag, result.stdout)
 
-    def do_check_port(self): self._todo(f"포트 검사: {self.var_host.get()}:{self.var_port.get()}", area="diag")
+    def do_check_port(self): #self._todo(f"포트 검사: {self.var_host.get()}:{self.var_port.get()}", area="diag")
+        host = self.var_host.get()
+        port = int(self.var_port.get())
+
+        self._append(self.out_diag, f"해당 포트를 검사합니다. {host}:{port}\n")
+
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+        try:
+            sock.connect((host, port))
+            self._append(self.out_diag, f"[Success] : Listening on {host}:{port}\n")
+
+        except Exception as e:
+            self._append(self.out_diag, "[FAIL] : " + str(e) + "\n")
+
+        finally:
+            sock.close()
+
+
     def do_hton(self): self._todo("hton/ntoh 데모", area="diag")
     def do_inet4(self): self._todo(f"inet_pton/ntop IPv4: {self.var_ipv4.get()}", area="diag")
     def do_inet6(self): self._todo(f"inet_pton/ntop IPv6: {self.var_ipv6.get()}", area="diag")
