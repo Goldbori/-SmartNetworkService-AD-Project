@@ -8,6 +8,7 @@ import subprocess   # ipconfig 사용
 import platform     # 윈도우, 맥/리눅스 구별
 import socket       # 소켓함수 사용
 import struct       # 64비트 변환
+import threading
 
 class App(tk.Tk):
     def __init__(self):
@@ -16,6 +17,8 @@ class App(tk.Tk):
         self.geometry("1100x720")
         self.server_running = False
         self.client_connected = False
+        self.lock = threading.Lock()        # 공유 카운터 보호 
+        self.stop_event = threading.Event() # 안전 종료
         nb = ttk.Notebook(self); nb.pack(fill="both", expand=True)
         self.pg_diag = ttk.Frame(nb); nb.add(self.pg_diag, text="네트워크 진단")
         self.pg_server = ttk.Frame(nb); nb.add(self.pg_server, text="TCP 서버")
@@ -71,7 +74,7 @@ class App(tk.Tk):
     
     def log_diag(self, s): self._append(self.out_diag, s)
 
-# ---- 진단 스켈레톤 핸들러 (구현 지점) ----
+# ---- 진단 핸들러 (구현 지점) ----
     # 구현완료
     def do_ipconfig(self): #self._todo("IP 구성 확인 실행", area="diag")
         os_name = platform.system().lower()
@@ -200,21 +203,103 @@ class App(tk.Tk):
         ttk.Button(stat, text="상태 갱신", command=self.server_status).pack(side="left")
         self.out_srv = scrolledtext.ScrolledText(self.pg_server, height=28)
         self.out_srv.pack(fill="both", expand=True)
+
     def log_srv(self, s): self._append(self.out_srv, s)
-# ---- 서버 스켈레톤 핸들러 (구현 지점) ----
+
+
+# ---- 서버 핸들러 (구현 지점) ----
     def server_start(self):
+        # [구현 완료] 소켓 생성/리스닝/스레드 시작
+        if self.server_running:
+            return
         self.server_running = True
-        self.log_srv(f"[서버] 시작 @ {self.var_srv_port.get()} (스켈레톤)")
-# TODO: 소켓 생성/리스닝/스레드 시작
+        self.stop_event.clear()
+
+        port = int(self.var_srv_port.get())
+        self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.server_sock.bind(("0.0.0.0", port))
+        self.server_sock.listen()
+
+        self.clients = [] # 접속한 클라이언트 소켓 리스트
+        self.client_threads = [] # 접속한 클라이언트 스레드 리스트
+        self.counter_lock = 0 # 접속한 클라이언트의 수 (공유 카운터)
+
+        threading.Thread(target=self.accept_loop).start()
+        self.log_srv(f"[서버] 시작 @ {port}")
+
+
+    def accept_loop(self):
+        while not self.stop_event.is_set():
+            try:
+                client_sock, addr = self.server_sock.accept()
+                self.clients.append(client_sock)
+
+                self.log_srv(f"[접속] {addr}")
+
+                t = threading.Thread(target=self.server_recv, args=(client_sock, addr)).start()
+                self.client_threads.append(t)
+
+            except Exception as e:
+                if not self.stop_event.is_set():
+                    self.log_srv(f"[Error] accept 실패: {e}")
+                break
+
+
+    def server_recv(self, client_sock, addr):
+        try:
+            while not self.stop_event.is_set():
+                data = client_sock.recv(1024)
+                if not data:
+                    break
+
+                # 메시지 처리
+                self.log_srv(f"[수신] {addr}: {data.decode()}")
+
+                # 공유 카운터 증가
+                with self.counter_lock:
+                    self.counter += 1
+
+        except Exception as e:
+            self.log_srv(f"[Error] 수신 실패 {addr}: {e}")
+
+        finally:
+            client_sock.close()
+            self.clients.remove(client_sock)
+            self.log_srv(f"[해제] {addr}")
+
+
     def server_stop(self):
+        # [구현 완료] stop event, join
+        if not self.server_running:
+            return
+
         self.server_running = False
-        self.log_srv("[서버] 정지 요청 (스켈레톤)")
-# TODO: stop event, join
+        self.stop_event.set()
+
+        try:
+            self.server_sock.close()
+        except:
+            pass
+
+        # 모든 클라이언트 소켓 닫기
+        for sock in self.clients:
+            sock.close()
+
+        # 모든 스레드 join하기 (안전 종료)
+        for t in self.client_threads:
+            t.join()
+
+        self.log_srv("[서버] 정지 완료")
+
+
     def server_status(self):
         # TODO: 실제 접속 수/카운터 반영
         self.lbl_clients.config(text="접속: ?")
         self.lbl_counter.config(text="카운터: ?")
         self.log_srv("[서버] 상태 갱신 (스켈레톤)")
+
+
 # ---------------- TCP 클라이언트 ----------------
     def _build_client(self):
         top = ttk.Frame(self.pg_client, padding=8); top.pack(fill="x")
@@ -247,13 +332,19 @@ class App(tk.Tk):
         self.client_connected = True
         self.log_cli(f"[클라] 연결 시도 → {self.var_cli_host.get()}:{self.var_cli_port.get()} (스켈레톤)")
 # TODO: socket connect + recv 루프
+
+
     def cli_close(self):
         self.client_connected = False
         self.log_cli("[클라] 연결 해제 (스켈레톤)")
 # TODO: close
+
+
     def cli_send(self):
         self.log_cli(f"[클라] 모드={self.var_mode.get()} 메시지='{self.var_msg.get()}' (스켈레톤)")
 # TODO: VAR/FIXED/MIX 전송 구현
+
+
 # ---------------- 버퍼/소켓 ----------------
     def _build_buf(self):
         top = ttk.Frame(self.pg_buf, padding=8); top.pack(fill="x")
