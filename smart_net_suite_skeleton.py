@@ -102,7 +102,7 @@ class App(tk.Tk):
 
         result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text = True)
         self._append(self.out_diag, result.stdout)
-
+    #구현완료 time-out 감지형태로 만들어놓음
     def do_check_port(self): #self._todo(f"포트 검사: {self.var_host.get()}:{self.var_port.get()}", area="diag")
         host = self.var_host.get()
         port = int(self.var_port.get())
@@ -125,8 +125,21 @@ class App(tk.Tk):
     def do_hton(self): self._todo("hton/ntoh 데모", area="diag")
     def do_inet4(self): self._todo(f"inet_pton/ntop IPv4: {self.var_ipv4.get()}", area="diag")
     def do_inet6(self): self._todo(f"inet_pton/ntop IPv6: {self.var_ipv6.get()}", area="diag")
-    def do_dns(self): self._todo(f"DNS 조회: {self.var_dns.get()}", area="diag")
-    def do_reverse(self): self._todo(f"역방향 조회: {self.var_rev.get()}", area="diag")
+
+    def do_dns(self): #self._todo(f"DNS 조회: {self.var_dns.get()}", area="diag")
+        dn = self.var_dns.get()
+        cmd = "nslookup " + dn
+        self._append(self.out_diag, f"$ {cmd}\n")
+        result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text = True)
+        self._append(self.out_diag, result.stdout)
+
+
+    def do_reverse(self): #self._todo(f"역방향 조회: {self.var_rev.get()}", area="diag")
+        addr = self.var_rev.get()
+        cmd = "nslookup " + addr
+        self._append(self.out_diag, f"$ {cmd}\n")
+        result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text=True)
+        self._append(self.out_diag, result.stdout)
 # ---------------- TCP 서버 ----------------
     def _build_server(self):
         top = ttk.Frame(self.pg_server, padding=8); top.pack(fill="x")
