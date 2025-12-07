@@ -207,26 +207,29 @@ class App(tk.Tk):
     def log_srv(self, s): self._append(self.out_srv, s)
 
 
-# ---- 서버 핸들러 (구현 지점) ----
+# ---- 서버 핸들러 (수정 완료: 안전 종료 가능) ----
+
+    # [구현 완료] 소켓 생성/리스닝/스레드 시작
     def server_start(self):
-        # [구현 완료] 소켓 생성/리스닝/스레드 시작
         if self.server_running:
             return
+
         self.server_running = True
         self.server_stop_event.clear()
 
         host = "0.0.0.0"
         port = int(self.var_srv_port.get())
+
         self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server_sock.bind((host, port))
         self.server_sock.listen()
 
-        self.clients = [] # 접속한 클라이언트 소켓 리스트
-        self.client_threads = [] # 접속한 클라이언트 스레드 리스트
-        self.counter = 0
+        self.clients = [] # 접속한 클라이언트 소켓 리스트 
+        self.client_threads = [] # 접속한 클라이언트 스레드 리스트 
+        self.counter = 0 # 접속한 클라이언트의 수 (공유 카운터)
 
-        threading.Thread(target=self.accept_loop).start()
+        threading.Thread(target=self.accept_loop, daemon=True).start()
         self.log_srv(f"[서버] 시작 @ {port}")
 
 
@@ -234,44 +237,121 @@ class App(tk.Tk):
         while not self.server_stop_event.is_set():
             try:
                 client_sock, addr = self.server_sock.accept()
+                client_sock.settimeout(0.5)  # 모든 recv가 타임아웃 기반으로
+
                 self.clients.append(client_sock)
+                self.log_srv(f"[서버] 클라이언트 접속 -> {addr}")
 
-                self.log_srv(f"[접속] {addr}")
-
-                t = threading.Thread(target=self.server_recv, args=(client_sock, addr)).start()
+                t = threading.Thread(target=self.server_recv, args=(client_sock, addr), daemon=True)
+                t.start()
                 self.client_threads.append(t)
 
+            except OSError:
+                # server_sock이 close되면 accept는 여기로 들어옴 → 정상 종료
+                break
             except Exception as e:
                 if not self.server_stop_event.is_set():
-                    self.log_srv(f"[Error] accept 실패: {e}")
+                    self.log_srv(f"[서버] accept 실패 -> {e}")
                 break
 
 
     def server_recv(self, client_sock, addr):
         try:
             while not self.server_stop_event.is_set():
-                data = client_sock.recv(1024)
-                if not data:
-                    break
+                try:
+                    mode = client_sock.recv(1)
+                    if not mode:
+                        break
 
-                # 메시지 처리
-                self.log_srv(f"[수신] {addr}: {data.decode()}")
+                    if mode == b'\x01':
+                        data = self.recv_fixed(client_sock)
+                    elif mode == b'\x02':
+                        data = self.recv_var(client_sock)
+                    elif mode == b'\x03':
+                        data = self.recv_mix(client_sock)
+                    else:
+                        self.log_srv(f"[서버] {addr} recv 실패 -> 잘못된 모드")
+                        break
 
-                # 공유 카운터 증가
-                with self.counter_lock:
-                    self.counter += 1
+                    if data is None:
+                        break
+
+                    self.log_srv(f"[서버] {addr} 메시지='{data.decode()}' 수신")
+
+                    with self.counter_lock:
+                        self.counter += 1
+
+                except socket.timeout:
+                    continue
 
         except Exception as e:
-            self.log_srv(f"[Error] 수신 실패 {addr}: {e}")
+            self.log_srv(f"[서버] {addr} 수신 실패 -> {e}")
 
         finally:
-            client_sock.close()
-            self.clients.remove(client_sock)
-            self.log_srv(f"[해제] {addr}")
+            try:
+                client_sock.close()
+            except:
+                pass
+
+            if client_sock in self.clients:
+                self.clients.remove(client_sock)
+
+            self.log_srv(f"[서버] 클라이언트 접속 해제 -> {addr}")
 
 
+    def recv_exact(self, sock, size):
+        buf = b''
+        while len(buf) < size and not self.server_stop_event.is_set():
+            try:
+                chunk = sock.recv(size - len(buf))
+                if not chunk:
+                    return None
+                buf += chunk
+
+            except socket.timeout:
+                if self.server_stop_event.is_set():
+                    return None
+                continue
+            except:
+                return None
+        return buf
+
+
+    def recv_fixed(self, client_sock):
+        return self.recv_exact(client_sock, 32)
+
+
+    def recv_var(self, client_sock):
+        buf = b''
+        while not self.server_stop_event.is_set():
+            try:
+                chunk = client_sock.recv(1)
+                if not chunk:
+                    return None
+                buf += chunk
+                if chunk == b'\n':
+                    break
+
+            except socket.timeout:
+                if self.server_stop_event.is_set():
+                    return None
+                continue
+            except:
+                return None
+        return buf
+
+
+    def recv_mix(self, client_sock):
+        length_bytes = self.recv_exact(client_sock, 4)
+        if length_bytes is None:
+            return None
+
+        msg_len = int.from_bytes(length_bytes, 'big')
+        return self.recv_exact(client_sock, msg_len)
+
+
+    # [구현 완료] stop event, join
     def server_stop(self):
-        # [구현 완료] stop event, join
         if not self.server_running:
             return
 
@@ -284,21 +364,28 @@ class App(tk.Tk):
             pass
 
         # 모든 클라이언트 소켓 닫기
-        for sock in self.clients:
-            sock.close()
+        for sock in list(self.clients):
+            try:
+                sock.shutdown(socket.SHUT_RDWR)
+            except:
+                pass
+            try:
+                sock.close()
+            except:
+                pass
 
-        # 모든 스레드 join하기 (안전 종료)
-        for t in self.client_threads:
-            t.join()
+        # 스레드 join
+        for t in list(self.client_threads):
+            t.join(timeout=1.0)  # 무한 대기 방지
 
         self.log_srv("[서버] 정지 완료")
 
 
     def server_status(self):
-        # TODO: 실제 접속 수/카운터 반영
-        self.lbl_clients.config(text="접속: ?")
-        self.lbl_counter.config(text="카운터: ?")
-        self.log_srv("[서버] 상태 갱신 (스켈레톤)")
+        # [구현 완료] 실제 접속 수/카운터 반영
+        self.lbl_clients.config(text=f"접속: {self.clients.__len__()}")
+        self.lbl_counter.config(text=f"카운터: {self.counter}")
+        self.log_srv("[서버] 상태 갱신")
 
 
 # ---------------- TCP 클라이언트 ----------------
@@ -330,6 +417,7 @@ class App(tk.Tk):
 
 # ---- 클라이언트 스켈레톤 핸들러 (구현 지점) ----
     def cli_connect(self):
+        # [구현 완료] socket connect + recv 루프
         if self.client_connected:
             return
 
@@ -346,8 +434,7 @@ class App(tk.Tk):
         self.cli_thread = threading.Thread(target=self.cli_recv_loop, daemon=True)
         self.cli_thread.start()
 
-        self.log_cli("[클라] 서버 연결 완료")
-# TODO: socket connect + recv 루프
+        self.log_cli(F"[클라] 연결 시도 -> {host}:{port}")
 
     def cli_recv_loop(self):
         try:
@@ -357,7 +444,7 @@ class App(tk.Tk):
                     break
                 self.log_cli(f"[수신] {data.decode(errors='ignore')}")
         except Exception as e:
-            self.log_cli(f"[클라 Error] 수신 실패: {e}")
+            self.log_cli(f"[클라 Error] 수신 실패 -> {e}")
         finally:
             self.cli_close()
 
@@ -401,15 +488,15 @@ class App(tk.Tk):
         else:
             self.log_cli("[클라] 잘못된 모드")
 
-        self.log_cli(f"[클라] ({mode}) '{msg}' 전송 완료")
+        self.log_cli(f"[클라] 모드={mode} 메시지='{msg}' 전송 완료")
 
         if self.var_after_close.get():
             self.log_cli("[클라] 전송 후 즉시 연결 종료 옵션 활성화 → 클라이언트 종료")
             self.cli_close()
 
-
+    # 고정 길이 전송
     def send_fixed(self, msg: str):
-        FIXED_LEN = 16
+        FIXED_LEN = 32 # TODO: 32B로 수정할 것.
 
         b = msg.encode()
 
@@ -418,20 +505,23 @@ class App(tk.Tk):
         else:
             b = b[:FIXED_LEN]              # 자르기
 
-        self.client_sock.sendall(b)
+        mode = b'\x01'
+        self.client_sock.sendall(mode + b)
 
-
+    # 가변 길이 전송
     def send_var(self, msg: str):
         data = (msg + "\n").encode()
-        self.client_sock.sendall(data)
+        mode = b'\x02'
+        self.client_sock.sendall(mode + data)
 
-
+    # 고정 + 가변 전송
     def send_mix(self, msg: str):
         payload = msg.encode()
         length = len(payload)
 
         prefix = length.to_bytes(4, 'big')  # 4바이트
-        self.client_sock.sendall(prefix + payload)
+        mode = b'\x03'
+        self.client_sock.sendall(mode + prefix + payload)
 
 
 # ---------------- 버퍼/소켓 ----------------
