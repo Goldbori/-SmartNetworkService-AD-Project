@@ -109,9 +109,9 @@ class App(tk.Tk):
 
         self._append(self.out_diag, f"해당 포트를 검사합니다. {host}:{port}\n")
 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-
-        try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)    #임시 소켓 생성
+        sock.settimeout(1)  #1초로 설정
+        try:    #소켓 연결 시도 -> 예외띄우면 닫혀있거나 막힌 것으로 판단.
             sock.connect((host, port))
             self._append(self.out_diag, f"[Success] : Listening on {host}:{port}\n")
 
@@ -119,7 +119,7 @@ class App(tk.Tk):
             self._append(self.out_diag, "[FAIL] : " + str(e) + "\n")
 
         finally:
-            sock.close()
+            sock.close()    #임시소켓 해제
 
 
     def do_hton(self): self._todo("hton/ntoh 데모", area="diag")
