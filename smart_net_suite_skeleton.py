@@ -84,7 +84,23 @@ class App(tk.Tk):
 
         self._append(self.out_diag, result.stdout)
 
-    def do_netstat(self): self._todo(f"netstat 필터: {self.var_netstat.get()}", area="diag")
+    def do_netstat(self): #self._todo(f"netstat 필터: {self.var_netstat.get()}", area="diag")
+
+        netstat_filter = self.var_netstat.get()
+        os_name = platform.system().lower()
+
+        cmd = "netstat -a -n -p tcp | "
+
+        if "windows" in os_name:
+            cmd += "findstr " + netstat_filter
+            self._append(self.out_diag, "$" + cmd + '\n')
+        else:
+            cmd += "grep " + netstat_filter
+            self._append(self.out_diag, "$" + cmd + '\n')
+
+        result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text = True)
+        self._append(self.out_diag, result.stdout)
+
     def do_check_port(self): self._todo(f"포트 검사: {self.var_host.get()}:{self.var_port.get()}", area="diag")
     def do_hton(self): self._todo("hton/ntoh 데모", area="diag")
     def do_inet4(self): self._todo(f"inet_pton/ntop IPv4: {self.var_ipv4.get()}", area="diag")
