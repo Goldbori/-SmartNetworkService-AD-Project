@@ -418,23 +418,26 @@ class App(tk.Tk):
 # ---- 클라이언트 스켈레톤 핸들러 (구현 지점) ----
     def cli_connect(self):
         # [구현 완료] socket connect + recv 루프
-        if self.client_connected:
-            return
+        try:
+            if self.client_connected:
+                return
+            
+            self.client_connected = True
 
-        self.client_connected = True
+            host = self.var_cli_host.get()
+            port = int(self.var_cli_port.get())
 
-        host = self.var_cli_host.get()
-        port = int(self.var_cli_port.get())
+            self.client_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.client_sock.connect((host, port))
 
-        self.client_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.client_sock.connect((host, port))
+            # --- recv 전용 스레드 시작 ---
+            self.cli_stop_event = threading.Event()
+            self.cli_thread = threading.Thread(target=self.cli_recv_loop, daemon=True)
+            self.cli_thread.start()
 
-        # --- recv 전용 스레드 시작 ---
-        self.cli_stop_event = threading.Event()
-        self.cli_thread = threading.Thread(target=self.cli_recv_loop, daemon=True)
-        self.cli_thread.start()
-
-        self.log_cli(F"[클라] 연결 시도 -> {host}:{port}")
+            self.log_cli(F"[클라] 연결 시도 -> {host}:{port}")
+        except Exception as e:
+            self.log_cli(f"[클라 Error] 연결 실패 -> {e}")
 
     def cli_recv_loop(self):
         try:
@@ -535,11 +538,49 @@ class App(tk.Tk):
     def log_buf(self, s): self._append(self.out_buf, s)
 # ---- 버퍼 스켈레톤 핸들러 ----
     def buf_client(self):
-        self.log_buf("[버퍼] 클라이언트 소켓 버퍼 조회 (스켈레톤)")
-# TODO: getsockopt SO_SNDBUF/SO_RCVBUF
+        # [구현 완료] getsockopt SO_SNDBUF/SO_RCVBUF
+        self.log_buf("[버퍼] 클라이언트 소켓 버퍼 조회")
+
+        if not hasattr(self, "client_sock") or self.client_sock is None:
+            self.log_buf("[버퍼] 클라이언트 소켓 없음")
+            return
+
+        try:
+            # 각 버퍼 크기 조회
+            snd = self.client_sock.getsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF)
+            rcv = self.client_sock.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF)
+
+            self.log_buf(f"[버퍼] SO_SNDBUF (송신 버퍼): {snd} bytes")
+            self.log_buf(f"[버퍼] SO_RCVBUF (수신 버퍼): {rcv} bytes")
+
+        except Exception as e:
+            self.log_buf(f"[버퍼] 조회 실패: {e}")
+
     def buf_temp(self):
-        self.log_buf("[버퍼] 임시 소켓 생성 후 버퍼 조회 (스켈레톤)")
-# TODO: socket() 후 옵션 조회
+        # [구현 완료] socket() 후 옵션 조회
+        self.log_buf("[버퍼] 임시 소켓 생성 후 버퍼 조회")
+
+        try:
+            # 임시 소켓 생성
+            temp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+
+            # 각 버퍼 크기 조회
+            snd = temp_sock.getsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF)
+            rcv = temp_sock.getsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF)
+
+            self.log_buf(f"[버퍼] SO_SNDBUF (송신 버퍼): {snd} bytes")
+            self.log_buf(f"[버퍼] SO_RCVBUF (수신 버퍼): {rcv} bytes")
+
+        except Exception as e:
+            self.log_buf(f"[버퍼] 임시 소켓 조회 실패: {e}")
+
+        finally:
+            # 소켓 해제
+            try:
+                temp_sock.close()
+            except:
+                pass
+
 # ---------------- 네트워크 그림판 ----------------
     def _build_draw(self):
         info = ttk.Frame(self.pg_draw, padding=8); info.pack(fill="x")
