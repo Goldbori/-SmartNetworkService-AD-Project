@@ -112,9 +112,9 @@ class App(tk.Tk):
 
         try:
             sock.connect((host, port))
-            self.log_diag("[Success] 포트 열려 있음.")
+            self.log_diag("[Success] 포트 열려 있음.\n")
         except Exception as e:
-            self.log_diag("[FAIL] " + str(e))
+            self.log_diag("[FAIL] " + str(e) + "\n")
         finally:
             sock.close()
 
@@ -125,25 +125,25 @@ class App(tk.Tk):
         self.log_diag(f" 32비트 htonl={socket.htonl(x)}")
 
         net64 = struct.pack(">Q", x)
-        self.log_diag(f" 64비트 = {net64.hex()}")
+        self.log_diag(f" 64비트 = {net64.hex()}\n")
 
     def do_inet4(self):
         ipv4 = self.var_ipv4.get()
         try:
             packed = socket.inet_pton(socket.AF_INET, ipv4)
             unpacked = socket.inet_ntop(socket.AF_INET, packed)
-            self.log_diag(f"입력={ipv4} → {packed.hex()} → {unpacked}")
+            self.log_diag(f"입력={ipv4} → {packed.hex()} → {unpacked}\n")
         except Exception as e:
-            self.log_diag("[ERROR] IPv4 변환 실패: " + str(e))
+            self.log_diag("[ERROR] IPv4 변환 실패: " + str(e) + "\n")
 
     def do_inet6(self):
         ipv6 = self.var_ipv6.get()
         try:
             packed = socket.inet_pton(socket.AF_INET6, ipv6)
             unpacked = socket.inet_ntop(socket.AF_INET6, packed)
-            self.log_diag(f"입력={ipv6} → {packed.hex()} → {unpacked}")
+            self.log_diag(f"입력={ipv6} → {packed.hex()} → {unpacked}\n")
         except Exception as e:
-            self.log_diag("[ERROR] IPv6 변환 실패: " + str(e))
+            self.log_diag("[ERROR] IPv6 변환 실패: " + str(e) + "\n")
 
     def do_dns(self):
         dn = self.var_dns.get()
@@ -151,6 +151,7 @@ class App(tk.Tk):
         self.log_diag(f"$ {cmd}")
         result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text=True)
         self.log_diag(result.stdout)
+        self.log_diag("\n")
 
     def do_reverse(self):
         addr = self.var_rev.get()
@@ -158,6 +159,7 @@ class App(tk.Tk):
         self.log_diag(f"$ {cmd}")
         result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text=True)
         self.log_diag(result.stdout)
+        self.log_diag("\n")
 
 # ---------------- TCP 서버 ----------------
     def _build_server(self):
@@ -582,7 +584,7 @@ class App(tk.Tk):
 
         self._last_xy = (x2, y2)
 
-    # ---------------- Ryu SFC ----------------
+# ---------------- Ryu SFC ----------------
     def _build_sfc(self):
         top = ttk.Frame(self.pg_sfc, padding=8);
         top.pack(fill="x")
@@ -639,7 +641,6 @@ class App(tk.Tk):
             return None, str(e)
 
     def sfc_install(self):
-        import json
         host = self.var_rest_host.get()
         port = self.var_rest_port.get()
         dpid = int(self.var_dpid.get())
@@ -692,7 +693,7 @@ class App(tk.Tk):
     def sfc_dump(self):
         host = self.var_rest_host.get()
         port = self.var_rest_port.get()
-        dpid = self.var_dpid.get()
+        dpid = int(self.var_dpid.get())
 
         url = f"http://{host}:{port}/stats/flow/{dpid}"
         txt, err = self._rest("GET", url)
