@@ -1,4 +1,4 @@
-# smart_net_suite_skeleton.py
+# smart_net_suite.py
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 import subprocess
