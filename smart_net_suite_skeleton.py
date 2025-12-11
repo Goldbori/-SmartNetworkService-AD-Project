@@ -1,14 +1,13 @@
 # smart_net_suite_skeleton.py
-# 통합 네트워크/SFC GUI 스켈레톤 (기능 비워둔 틀)
-# - 실행은 되지만 실제 네트워크/REST 동작 없음
-# - 각 TODO 지점에 구현을 채워 넣으세요.
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
-import subprocess   # ipconfig 사용
-import platform     # 윈도우, 맥/리눅스 구별
-import socket       # 소켓함수 사용
-import struct       # 64비트 변환
+import subprocess
+import platform
+import socket
+import struct
 import threading
+import requests
+
 
 class App(tk.Tk):
     def __init__(self):
@@ -74,27 +73,23 @@ class App(tk.Tk):
     
     def log_diag(self, s): self._append(self.out_diag, s)
 
-# ---- 진단 핸들러 (구현 지점) ----
-    # 구현완료
-    def do_ipconfig(self): #self._todo("IP 구성 확인 실행", area="diag")
+    # ---- 진단 핸들러 ----
+    def do_ipconfig(self):
         os_name = platform.system().lower()
 
-        if "windows" in os_name:    #Window인 경우
+        if "windows" in os_name:
             self.log_diag("$ ipconfig /all")
             cmd = "ipconfig /all"
-        else:                       #Mac/Linux인 경우
+        else:
             self.log_diag("$ ifconfig -a")
             cmd = "ifconfig -a"
 
-        result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text = True)
+        result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text=True)
         self.log_diag(result.stdout)
 
-    # 구현완료
-    def do_netstat(self): #self._todo(f"netstat 필터: {self.var_netstat.get()}", area="diag")
-
+    def do_netstat(self):
         netstat_filter = self.var_netstat.get()
         os_name = platform.system().lower()
-
         cmd = "netstat -a -n -p tcp | "
 
         if "windows" in os_name:
@@ -104,86 +99,63 @@ class App(tk.Tk):
             cmd += "grep " + netstat_filter
             self.log_diag("$" + cmd + '\n')
 
-        result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text = True)
+        result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text=True)
         self.log_diag(result.stdout)
 
-    # 구현완료 time-out 감지형태로 만들어놓음
-    def do_check_port(self): #self._todo(f"포트 검사: {self.var_host.get()}:{self.var_port.get()}", area="diag")
+    def do_check_port(self):
         host = self.var_host.get()
         port = int(self.var_port.get())
+        self.log_diag(f"포트 검사: {host}:{port}")
 
-        self.log_diag(f"해당 포트를 검사합니다. {host}:{port}\n")
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(1)
 
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)    # 임시 소켓 생성
-        sock.settimeout(1)  # 1초로 설정
-        try:    # 소켓 연결 시도 -> 예외 띄우면 닫혀있거나 막힌 것으로 판단
+        try:
             sock.connect((host, port))
-            self.log_diag(f"[Success] : Listening on {host}:{port}\n")
-
+            self.log_diag("[Success] 포트 열려 있음.")
         except Exception as e:
-            self.log_diag("[FAIL] : " + str(e) + "\n")
-
+            self.log_diag("[FAIL] " + str(e))
         finally:
-            sock.close()    # 임시소켓 해제
+            sock.close()
 
+    def do_hton(self):
+        x = 12345
+        self.log_diag(f"[hton/ntoh 데모] 입력값: {x}")
+        self.log_diag(f" 16비트 htons={socket.htons(x)}")
+        self.log_diag(f" 32비트 htonl={socket.htonl(x)}")
 
-    def do_hton(self): #self._todo("hton/ntoh 데모", area="diag")
-        
-        x = 12345  # 테스트용 값
+        net64 = struct.pack(">Q", x)
+        self.log_diag(f" 64비트 = {net64.hex()}")
 
-        self.log_diag(f"[hton/ntoh 데모] 입력값: {x} (0x{x:04x})\n")
-
-        # 16비트
-        h2n16 = socket.htons(x)
-        self.log_diag(f" [16비트] host→net = 0x{h2n16:04x}")
-
-        # 32비트
-        h2n32 = socket.htonl(x)
-        self.log_diag(f" [32비트] host→net = 0x{h2n32:08x}")
-
-        # 64비트 (struct 필요)
-        net64 = struct.pack(">Q", x)     # big-endian
-        self.log_diag(f" [64비트] net64 = {net64.hex()}\n")
-
-
-    def do_inet4(self): #self._todo(f"inet_pton/ntop IPv4: {self.var_ipv4.get()}", area="diag")
+    def do_inet4(self):
         ipv4 = self.var_ipv4.get()
         try:
             packed = socket.inet_pton(socket.AF_INET, ipv4)
             unpacked = socket.inet_ntop(socket.AF_INET, packed)
-
-            self.log_diag(f"[inet_pton/ntop IPv4] 입력={ipv4}\n")
-            self.log_diag(f"  pton → {packed.hex()}")
-            self.log_diag(f"  ntop → {unpacked}\n")
-
+            self.log_diag(f"입력={ipv4} → {packed.hex()} → {unpacked}")
         except Exception as e:
-            self.log_diag(f"[ERROR] IPv4 변환 실패: {e}\n")
+            self.log_diag("[ERROR] IPv4 변환 실패: " + str(e))
 
-    def do_inet6(self): #self._todo(f"inet_pton/ntop IPv6: {self.var_ipv6.get()}", area="diag")
+    def do_inet6(self):
         ipv6 = self.var_ipv6.get()
         try:
             packed = socket.inet_pton(socket.AF_INET6, ipv6)
             unpacked = socket.inet_ntop(socket.AF_INET6, packed)
-
-            self.log_diag(f"[inet_pton/ntop IPv6] 입력={ipv6}\n")
-            self.log_diag(f"  pton → {packed.hex()}")
-            self.log_diag(f"  ntop → {unpacked}\n")
-
+            self.log_diag(f"입력={ipv6} → {packed.hex()} → {unpacked}")
         except Exception as e:
-            self.log_diag(f"[ERROR] IPv6 변환 실패: {e}\n")
+            self.log_diag("[ERROR] IPv6 변환 실패: " + str(e))
 
-    def do_dns(self): #self._todo(f"DNS 조회: {self.var_dns.get()}", area="diag")
+    def do_dns(self):
         dn = self.var_dns.get()
         cmd = "nslookup " + dn
-        self.log_diag(f"$ {cmd}\n")
-        result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text = True)
+        self.log_diag(f"$ {cmd}")
+        result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text=True)
         self.log_diag(result.stdout)
 
-
-    def do_reverse(self): #self._todo(f"역방향 조회: {self.var_rev.get()}", area="diag")
+    def do_reverse(self):
         addr = self.var_rev.get()
         cmd = "nslookup " + addr
-        self.log_diag(f"$ {cmd}\n")
+        self.log_diag(f"$ {cmd}")
         result = subprocess.run(cmd, shell=True, stdout=subprocess.PIPE, text=True)
         self.log_diag(result.stdout)
 
@@ -206,55 +178,49 @@ class App(tk.Tk):
 
     def log_srv(self, s): self._append(self.out_srv, s)
 
-
-# ---- 서버 핸들러 (수정 완료: 안전 종료 가능) ----
-
-    # [구현 완료] 소켓 생성/리스닝/스레드 시작
+# ---- 서버 핸들러 ----
+    # 서버 실행
     def server_start(self):
         if self.server_running:
             return
 
         self.server_running = True
-        self.server_stop_event.clear()
+        self.server_stop_event.clear() # 서버 정지 이벤트 초기화(set되어 있으면 스레드가 종료됨)
 
         host = "0.0.0.0"
         port = int(self.var_srv_port.get())
 
-        self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.server_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM) # 서버 소켓 생성
         self.server_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.server_sock.bind((host, port))
-        self.server_sock.listen()
+        self.server_sock.listen() # 리스닝 시작
 
-        self.clients = [] # 접속한 클라이언트 소켓 리스트 
-        self.client_threads = [] # 접속한 클라이언트 스레드 리스트 
-        self.counter = 0 # 접속한 클라이언트의 수 (공유 카운터)
+        self.clients = [] # 접속한 클라이언트 소켓 정보 리스트
+        self.client_threads = [] # 접속한 클라이언트 스레드 리스트
+        self.counter = 0 # 클라이언트가 송신한 메시지 수(공유 카운터)
 
-        threading.Thread(target=self.accept_loop, daemon=True).start()
+        threading.Thread(target=self.accept_loop, daemon=True).start() # 클라이언트를 accept하는 스레드 시작
         self.log_srv(f"[서버] 시작 @ {port}")
 
-
+    # 서버가 정지될 때까지 클라이언트를 계속 accpet
     def accept_loop(self):
         while not self.server_stop_event.is_set():
             try:
                 client_sock, addr = self.server_sock.accept()
-                client_sock.settimeout(0.5)  # 모든 recv가 타임아웃 기반으로
+                client_sock.settimeout(0.5)
 
                 self.clients.append(client_sock)
-                self.log_srv(f"[서버] 클라이언트 접속 -> {addr}")
+                self.log_srv(f"[서버] 클라이언트 접속 → {addr}")
 
+                # 클라이언트 수신 스레드 생성 후 실행
                 t = threading.Thread(target=self.server_recv, args=(client_sock, addr), daemon=True)
                 t.start()
                 self.client_threads.append(t)
 
-            except OSError:
-                # server_sock이 close되면 accept는 여기로 들어옴 → 정상 종료
-                break
-            except Exception as e:
-                if not self.server_stop_event.is_set():
-                    self.log_srv(f"[서버] accept 실패 -> {e}")
+            except:
                 break
 
-
+    # 수신 메세지 처리
     def server_recv(self, client_sock, addr):
         try:
             while not self.server_stop_event.is_set():
@@ -263,6 +229,16 @@ class App(tk.Tk):
                     if not mode:
                         break
 
+                    # --- 그림판 브로드캐스트 모드 추가 ---
+                    if mode == b'D':
+                        data = self.recv_var(client_sock)
+                        if data is None:
+                            break
+                        self.broadcast(b'D' + data, sender=client_sock)
+                        self.log_srv(f"[그림] {addr} → {data.decode().strip()}")
+                        continue
+
+                    # --- 기존 메시지 모드 ---
                     if mode == b'\x01':
                         data = self.recv_fixed(client_sock)
                     elif mode == b'\x02':
@@ -270,7 +246,7 @@ class App(tk.Tk):
                     elif mode == b'\x03':
                         data = self.recv_mix(client_sock)
                     else:
-                        self.log_srv(f"[서버] {addr} recv 실패 -> 잘못된 모드")
+                        self.log_srv(f"[서버] {addr} 잘못된 모드")
                         break
 
                     if data is None:
@@ -285,20 +261,27 @@ class App(tk.Tk):
                     continue
 
         except Exception as e:
-            self.log_srv(f"[서버] {addr} 수신 실패 -> {e}")
+            self.log_srv(f"[서버] 오류: {e}")
 
         finally:
             try:
                 client_sock.close()
             except:
                 pass
-
             if client_sock in self.clients:
                 self.clients.remove(client_sock)
+            self.log_srv(f"[서버] 접속 해제 → {addr}")
 
-            self.log_srv(f"[서버] 클라이언트 접속 해제 -> {addr}")
+    # 접속한 모든 클라이언트에게 브로드캐스트
+    def broadcast(self, data, sender=None):
+        for cli in list(self.clients):
+            if cli is not sender:
+                try:
+                    cli.sendall(data)
+                except:
+                    pass
 
-
+    # 주어진 길이만큼 반복적으로 메세지 수신
     def recv_exact(self, sock, size):
         buf = b''
         while len(buf) < size and not self.server_stop_event.is_set():
@@ -307,20 +290,17 @@ class App(tk.Tk):
                 if not chunk:
                     return None
                 buf += chunk
-
             except socket.timeout:
-                if self.server_stop_event.is_set():
-                    return None
                 continue
             except:
                 return None
         return buf
 
-
+    # 고정 길이 수신
     def recv_fixed(self, client_sock):
         return self.recv_exact(client_sock, 32)
 
-
+    # 가변 길이 수신
     def recv_var(self, client_sock):
         buf = b''
         while not self.server_stop_event.is_set():
@@ -331,26 +311,21 @@ class App(tk.Tk):
                 buf += chunk
                 if chunk == b'\n':
                     break
-
             except socket.timeout:
-                if self.server_stop_event.is_set():
-                    return None
                 continue
             except:
                 return None
         return buf
 
-
+    # 고정 + 가변 길이 수신
     def recv_mix(self, client_sock):
         length_bytes = self.recv_exact(client_sock, 4)
         if length_bytes is None:
             return None
-
         msg_len = int.from_bytes(length_bytes, 'big')
         return self.recv_exact(client_sock, msg_len)
 
-
-    # [구현 완료] stop event, join
+    # 서버 중지
     def server_stop(self):
         if not self.server_running:
             return
@@ -363,7 +338,6 @@ class App(tk.Tk):
         except:
             pass
 
-        # 모든 클라이언트 소켓 닫기
         for sock in list(self.clients):
             try:
                 sock.shutdown(socket.SHUT_RDWR)
@@ -374,19 +348,16 @@ class App(tk.Tk):
             except:
                 pass
 
-        # 스레드 join
         for t in list(self.client_threads):
-            t.join(timeout=1.0)  # 무한 대기 방지
+            t.join(timeout=1.0)
 
         self.log_srv("[서버] 정지 완료")
 
-
+    # 서버 실제 접속 수 및 카운터 갱신
     def server_status(self):
-        # [구현 완료] 실제 접속 수/카운터 반영
-        self.lbl_clients.config(text=f"접속: {self.clients.__len__()}")
+        self.lbl_clients.config(text=f"접속: {len(self.clients)}")
         self.lbl_counter.config(text=f"카운터: {self.counter}")
         self.log_srv("[서버] 상태 갱신")
-
 
 # ---------------- TCP 클라이언트 ----------------
     def _build_client(self):
@@ -415,53 +386,60 @@ class App(tk.Tk):
     
     def log_cli(self, s): self._append(self.out_cli, s)
 
-# ---- 클라이언트 스켈레톤 핸들러 (구현 지점) ----
+# ---- 클라이언트 핸들러 (구현 지점) ----
+    # 클라이언트 소켓 생성 후 서버와 연결 + 반복적으로 서버로부터 응답 수신
     def cli_connect(self):
-        # [구현 완료] socket connect + recv 루프
-        try:
-            if self.client_connected:
-                return
-            
-            self.client_connected = True
+        if self.client_connected: return
+        self.client_connected = True
 
-            host = self.var_cli_host.get()
-            port = int(self.var_cli_port.get())
+        host = self.var_cli_host.get()
+        port = int(self.var_cli_port.get())
 
-            self.client_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            self.client_sock.connect((host, port))
+        # 클라이언트 소켓 생성 및 서버 접속
+        self.client_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.client_sock.connect((host, port))
 
-            # --- recv 전용 스레드 시작 ---
-            self.cli_stop_event = threading.Event()
-            self.cli_thread = threading.Thread(target=self.cli_recv_loop, daemon=True)
-            self.cli_thread.start()
+        # 클라이언트 수신 스레드 생성 및 실행
+        self.cli_stop_event = threading.Event() # 수신 스레드 종료 신호
+        self.cli_thread = threading.Thread(target=self.cli_recv_loop, daemon=True)
+        self.cli_thread.start()
 
-            self.log_cli(F"[클라] 연결 시도 -> {host}:{port}")
-        except Exception as e:
-            self.log_cli(f"[클라 Error] 연결 실패 -> {e}")
+        self.log_cli(f"[클라] 연결됨 → {host}:{port}")
 
+    # 클라이언트 소켓이 종료될 때까지 반복적으로 서버 응답 수신
     def cli_recv_loop(self):
         try:
             while not self.cli_stop_event.is_set():
-                data = self.client_sock.recv(1024)
+                data = self.client_sock.recv(2048)
                 if not data:
                     break
+
+                # --- 그림판 좌표 수신 처리 (client) --- [추가됨]
+                if data.startswith(b'D'):
+                    try:
+                        coords = data[1:].decode().strip().split(',')
+                        x1, y1, x2, y2 = map(int, coords)
+                        self.canvas.after(0, lambda: self.canvas.create_line(x1, y1, x2, y2))
+                        continue
+                    except:
+                        pass
+
                 self.log_cli(f"[수신] {data.decode(errors='ignore')}")
+
         except Exception as e:
-            self.log_cli(f"[클라 Error] 수신 실패 -> {e}")
+            self.log_cli(f"[클라 ERROR] {e}")
+
         finally:
             self.cli_close()
 
-
+    # 클라이언트 소켓 종료
     def cli_close(self):
-        # [구현 완료] close
         if not self.client_connected:
             return
-        
         self.client_connected = False
 
         try:
-            if hasattr(self, 'cli_stop_event'):
-                self.cli_stop_event.set()
+            self.cli_stop_event.set()
         except:
             pass
 
@@ -472,60 +450,51 @@ class App(tk.Tk):
 
         self.log_cli("[클라] 연결 해제")
 
-
+    # 서버로 메세지 전송
     def cli_send(self):
-        # [구현 완료] VAR/FIXED/MIX 전송 구현
         if not self.client_connected:
             self.log_cli("[클라] 연결 안됨")
             return
-        
+
         mode = self.var_mode.get()
         msg = self.var_msg.get()
 
+        # 모드별 메시지 송신
         if mode == "FIXED":
             self.send_fixed(msg)
         elif mode == "VAR":
             self.send_var(msg)
         elif mode == "MIX":
             self.send_mix(msg)
-        else:
-            self.log_cli("[클라] 잘못된 모드")
 
-        self.log_cli(f"[클라] 모드={mode} 메시지='{msg}' 전송 완료")
+        self.log_cli(f"[전송] mode={mode}, msg='{msg}'")
 
         if self.var_after_close.get():
-            self.log_cli("[클라] 전송 후 즉시 연결 종료 옵션 활성화 → 클라이언트 종료")
             self.cli_close()
 
     # 고정 길이 전송
-    def send_fixed(self, msg: str):
-        FIXED_LEN = 32 # TODO: 32B로 수정할 것.
-
+    def send_fixed(self, msg):
+        FIXED_LEN = 32
         b = msg.encode()
 
         if len(b) < FIXED_LEN:
-            b = b.ljust(FIXED_LEN, b' ')   # 패딩
+            b = b.ljust(FIXED_LEN, b' ')
         else:
-            b = b[:FIXED_LEN]              # 자르기
+            b = b[:FIXED_LEN]
 
-        mode = b'\x01'
-        self.client_sock.sendall(mode + b)
+        self.client_sock.sendall(b'\x01' + b)
 
     # 가변 길이 전송
-    def send_var(self, msg: str):
+    def send_var(self, msg):
         data = (msg + "\n").encode()
-        mode = b'\x02'
-        self.client_sock.sendall(mode + data)
+        self.client_sock.sendall(b'\x02' + data)
 
-    # 고정 + 가변 전송
-    def send_mix(self, msg: str):
+    # 고정 + 가변 길이 전송
+    def send_mix(self, msg):
         payload = msg.encode()
         length = len(payload)
-
-        prefix = length.to_bytes(4, 'big')  # 4바이트
-        mode = b'\x03'
-        self.client_sock.sendall(mode + prefix + payload)
-
+        prefix = length.to_bytes(4, 'big')
+        self.client_sock.sendall(b'\x03' + prefix + payload)
 
 # ---------------- 버퍼/소켓 ----------------
     def _build_buf(self):
@@ -536,9 +505,10 @@ class App(tk.Tk):
         self.out_buf.pack(fill="both", expand=True)
 
     def log_buf(self, s): self._append(self.out_buf, s)
+
 # ---- 버퍼 스켈레톤 핸들러 ----
+    # 클라이언트 소켓 버퍼 조회
     def buf_client(self):
-        # [구현 완료] getsockopt SO_SNDBUF/SO_RCVBUF
         self.log_buf("[버퍼] 클라이언트 소켓 버퍼 조회")
 
         if not hasattr(self, "client_sock") or self.client_sock is None:
@@ -556,8 +526,8 @@ class App(tk.Tk):
         except Exception as e:
             self.log_buf(f"[버퍼] 조회 실패: {e}")
 
+    # 임시 소켓 생성 후 버퍼 조회
     def buf_temp(self):
-        # [구현 완료] socket() 후 옵션 조회
         self.log_buf("[버퍼] 임시 소켓 생성 후 버퍼 조회")
 
         try:
@@ -580,34 +550,51 @@ class App(tk.Tk):
                 temp_sock.close()
             except:
                 pass
-
 # ---------------- 네트워크 그림판 ----------------
     def _build_draw(self):
         info = ttk.Frame(self.pg_draw, padding=8); info.pack(fill="x")
-        ttk.Label(info, text="그림판 스켈레톤 — 드래그 시 선, (옵션) 네트워크 브로드캐스트").pack(side="left")
+        ttk.Label(info, text="그림판 — 드래그 시 선, (옵션) 네트워크 브로드캐스트").pack(side="left")
         self.canvas = tk.Canvas(self.pg_draw, bg="white", height=520)
         self.canvas.pack(fill="both", expand=True, padx=8, pady=8)
         self.canvas.bind("<ButtonPress-1>", self._draw_start)
         self.canvas.bind("<B1-Motion>", self._draw_move)
         self._last_xy = None
     def _draw_start(self, e): self._last_xy = (e.x, e.y)
+
     def _draw_move(self, e):
         if not self._last_xy: return
         x1,y1 = self._last_xy; x2,y2 = e.x, e.y
-        self.canvas.create_line(x1,y1,x2,y2) # TODO: 네트워크로 동기화하려면 여기서 송신
-        self._last_xy = (x2,y2)
-# ---------------- Ryu SFC (REST) --------------- 
+
+        # 로컬에 그리기
+        self.canvas.create_line(x1, y1, x2, y2)
+
+        if not self.var_broadcast.get():
+            self._last_xy = (x2, y2)
+            return
+
+        # 서버 연결되어 있으면 그림 정보 전송
+        if self.client_connected:
+            msg = f"{x1},{y1},{x2},{y2}\n"
+            try:
+                self.client_sock.sendall(b'D' + msg.encode())
+            except:
+                pass
+
+        self._last_xy = (x2, y2)
+
+    # ---------------- Ryu SFC ----------------
     def _build_sfc(self):
-        top = ttk.Frame(self.pg_sfc, padding=8); top.pack(fill="x")
+        top = ttk.Frame(self.pg_sfc, padding=8);
+        top.pack(fill="x")
         self.var_rest_host = tk.StringVar(value="127.0.0.1")
         self.var_rest_port = tk.StringVar(value="8080")
         self.var_dpid = tk.StringVar(value="1")
         self.var_prio = tk.StringVar(value="100")
         self.var_h1 = tk.StringVar(value="1")
         self.var_fw = tk.StringVar(value="2")
-        self.var_nat= tk.StringVar(value="3")
+        self.var_nat = tk.StringVar(value="3")
         self.var_h2 = tk.StringVar(value="4")
-        
+
         ttk.Label(top, text="Ryu").grid(row=0, column=0, sticky="e")
         ttk.Entry(top, textvariable=self.var_rest_host, width=14).grid(row=0, column=1)
         ttk.Label(top, text=":").grid(row=0, column=2)
@@ -616,33 +603,127 @@ class App(tk.Tk):
         ttk.Entry(top, textvariable=self.var_dpid, width=6).grid(row=0, column=5)
         ttk.Label(top, text="prio").grid(row=0, column=6, sticky="e")
         ttk.Entry(top, textvariable=self.var_prio, width=6).grid(row=0, column=7)
-        
-        ports = ttk.Frame(self.pg_sfc, padding=8); ports.pack(fill="x")
-        
-        for i,(lab,var) in enumerate([("h1",self.var_h1),("fw",self.var_fw),("nat",self.var_nat),("h2",self.var_h2)]):
-            ttk.Label(ports, text=lab).grid(row=0, column=i*2)
-            ttk.Entry(ports, textvariable=var, width=6).grid(row=0, column=i*2+1, padx=4)
-            btns = ttk.Frame(self.pg_sfc, padding=8); btns.pack(fill="x")
-            ttk.Button(btns, text="SFC 설치", command=self.sfc_install).pack(side="left", padx=4)
-            ttk.Button(btns, text="바이패스", command=self.sfc_bypass).pack(side="left", padx=4)
-            ttk.Button(btns, text="플로우 조회", command=self.sfc_dump).pack(side="left", padx=4)
-            ttk.Button(btns, text="플로우 삭제", command=self.sfc_clear).pack(side="left", padx=4)
-            self.out_sfc = scrolledtext.ScrolledText(self.pg_sfc, height=24)
-            self.out_sfc.pack(fill="both", expand=True, padx=8, pady=8)
+
+        ports = ttk.Frame(self.pg_sfc, padding=8);
+        ports.pack(fill="x")
+
+        for i, (lab, var) in enumerate(
+                [("h1", self.var_h1), ("fw", self.var_fw), ("nat", self.var_nat), ("h2", self.var_h2)]):
+            ttk.Label(ports, text=lab).grid(row=0, column=i * 2)
+            ttk.Entry(ports, textvariable=var, width=6).grid(row=0, column=i * 2 + 1, padx=4)
+
+        btns = ttk.Frame(self.pg_sfc, padding=8);
+        btns.pack(fill="x")
+        ttk.Button(btns, text="SFC 설치", command=self.sfc_install).pack(side="left", padx=4)
+        ttk.Button(btns, text="바이패스", command=self.sfc_bypass).pack(side="left", padx=4)
+        ttk.Button(btns, text="플로우 조회", command=self.sfc_dump).pack(side="left", padx=4)
+        ttk.Button(btns, text="플로우 삭제", command=self.sfc_clear).pack(side="left", padx=4)
+
+        self.out_sfc = scrolledtext.ScrolledText(self.pg_sfc, height=24)
+        self.out_sfc.pack(fill="both", expand=True, padx=8, pady=8)
 
     def log_sfc(self, s): self._append(self.out_sfc, s)
-# ---- SFC 스켈레톤 핸들러 ----
-    def sfc_install(self): self._todo("SFC 설치 (REST POST /stats/flowentry/add)", area="sfc")
-    def sfc_bypass(self): self._todo("바이패스 설치", area="sfc")
-    def sfc_dump(self): self._todo("플로우 조회 (GET /stats/flow/<dpid>)", area="sfc")
-    def sfc_clear(self): self._todo("플로우 삭제 (DELETE /stats/flowentry/clear/<dpid>)", area="sfc")
+
+    def _rest(self, method, url, json_data=None):
+        try:
+            if method == "GET":
+                r = requests.get(url, timeout=2)
+            elif method == "POST":
+                r = requests.post(url, json=json_data, timeout=2)
+            elif method == "DELETE":
+                r = requests.delete(url, timeout=2)
+            else:
+                return None, "Unknown method"
+            return r.text, None
+        except Exception as e:
+            return None, str(e)
+
+    def sfc_install(self):
+        import json
+        host = self.var_rest_host.get()
+        port = self.var_rest_port.get()
+        dpid = int(self.var_dpid.get())
+        prio = int(self.var_prio.get())
+
+        h1 = int(self.var_h1.get())
+        fw = int(self.var_fw.get())
+        nat = int(self.var_nat.get())
+        h2 = int(self.var_h2.get())
+
+        flows = [
+            {"dpid": dpid, "priority": prio, "match": {"in_port": h1}, "actions": [{"type": "OUTPUT", "port": fw}]},
+            {"dpid": dpid, "priority": prio, "match": {"in_port": fw}, "actions": [{"type": "OUTPUT", "port": nat}]},
+            {"dpid": dpid, "priority": prio, "match": {"in_port": nat}, "actions": [{"type": "OUTPUT", "port": h2}]}
+        ]
+
+        url = f"http://{host}:{port}/stats/flowentry/add"
+
+        for f in flows:
+            txt, err = self._rest("POST", url, f)
+            if err:
+                self.log_sfc("[ERROR] " + err)
+                return
+            self.log_sfc(f"[설치 완료] {f}")
+
+    def sfc_bypass(self):
+        host = self.var_rest_host.get()
+        port = self.var_rest_port.get()
+        dpid = int(self.var_dpid.get())
+        prio = int(self.var_prio.get())
+
+        h1 = int(self.var_h1.get())
+        h2 = int(self.var_h2.get())
+
+        flow = {
+            "dpid": dpid,
+            "priority": prio,
+            "match": {"in_port": h1},
+            "actions": [{"type": "OUTPUT", "port": h2}]
+        }
+
+        url = f"http://{host}:{port}/stats/flowentry/add"
+        txt, err = self._rest("POST", url, flow)
+
+        if err:
+            self.log_sfc("[ERROR] " + err)
+        else:
+            self.log_sfc(f"[바이패스 설치 완료] {flow}")
+
+    def sfc_dump(self):
+        host = self.var_rest_host.get()
+        port = self.var_rest_port.get()
+        dpid = self.var_dpid.get()
+
+        url = f"http://{host}:{port}/stats/flow/{dpid}"
+        txt, err = self._rest("GET", url)
+
+        if err:
+            self.log_sfc("[ERROR] " + err)
+        else:
+            self.log_sfc(txt)
+
+    def sfc_clear(self):
+        host = self.var_rest_host.get()
+        port = self.var_rest_port.get()
+        dpid = self.var_dpid.get()
+
+        url = f"http://{host}:{port}/stats/flowentry/clear/{dpid}"
+        txt, err = self._rest("DELETE", url)
+
+        if err:
+            self.log_sfc("[ERROR] " + err)
+        else:
+            self.log_sfc(f"[플로우 삭제 완료] {dpid}")
+
 # ---------------- 공용 ----------------
     def _append(self, widget, text):
         widget.insert("end", text + "\n")
         widget.see("end")
+        
     def _todo(self, msg, area):
         target = {"diag": self.out_diag, "sfc": self.out_sfc}.get(area, None)
         if target: self._append(target, f"[TODO] {msg}")
         else: messagebox.showinfo("TODO", msg)
+
 if __name__ == "__main__":
     App().mainloop()
