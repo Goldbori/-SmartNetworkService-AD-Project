@@ -14,24 +14,24 @@
 
 ## ✅ 요구사항 체크리스트 (16개)
 
-| 번호 | 요구사항 설명 | 구현 여부 | 관련 코드/탭 |
-|------|----------------|-----------|----------------|
-| 1 | 서버 시작/정지 기능 |  | Server 탭 |
-| 2 | 클라이언트 Connect/Disconnect |  | Client 탭 |
-| 3 | 고정길이 전송(FIXED) |  | Buffer/Send 탭 |
-| 4 | 가변길이 전송(VAR, '\n' 구분) |  | Buffer/Send 탭 |
-| 5 | MIX 모드(4바이트 길이 + 본문) |  | Buffer/Send 탭 |
-| 6 | 송신 후 close 기능 |  | Client 탭 버튼 |
-| 7 | 서버 브로드캐스트 기능 |  | Server 탭 |
-| 8 | 그림판(Drawing) 송수신 |  | Draw 탭 |
-| 9 | 그림판 브로드캐스트 ON/OFF |  | Draw 탭 |
-| 10 | 클라이언트 접속 리스트 표시 |  | Server 탭 |
-| 11 | 서버 수신 스레드 처리 |  | recv loop |
-| 12 | 클라이언트 수신 스레드 처리 |  | cli_recv_loop |
-| 13 | 공유 카운터 + Lock 처리 |  | Server recv |
-| 14 | 포트 점유 검사 및 오류 처리 |  | Log 탭 |
-| 15 | UI 로그 출력(Server/Client) |  | Log 탭 |
-| 16 | 예외 처리(연결 종료, Timeout 등) |  | 전체 |
+| 번호 | 요구사항 설명 | 구현 여부 |
+|------|----------------|-----------|
+| 1 | ifconfig로 IP 구성 확인 | O |
+| 2 | 바이트 정렬 함수 | O |
+| 3 | IP 주소 변환 함수 | O |
+| 4 | DNS와 이름 변환 | O |
+| 5 | Server 상태 확인 | O |
+| 6 | netstat -a -n -p tcp | findstr 9000 | O |
+| 7 | GUI TCP 서버 함수 상태 표시 | O |
+| 8 | TCP 클라이언트 함수 상태 표시 | O |
+| 9 | 소켓 데이터 구조체(버퍼) 상태 표시 | O |
+| 10 | 네트워크 그림판 | O |
+| 11 | 고정길이 전송 | O |
+| 12 | 가변길이 전송 | O |
+| 13 | 고정+가변 전송 | O |
+| 14 | 데이터 전송 후 종료 | O |
+| 15 | 멀티 스레드 동작 | O |
+| 16 | 임계영역/이벤트 연습 | O |
 
 ---
 
@@ -58,12 +58,17 @@ sudo apt-get install python3-tk
 ## 🔌 테스트 절차 (Test Procedure)
 
 ### 1) 네트워크 진단
-- Ping 테스트  
-- nslookup 테스트  
-- 네트워크 속도 측정  
+- ipconfig/ifconfig
+- netstat 필터
+- 포트 오픈 검사
+- hton/ntoh 데모
+- inet_pton/ntop(IPv4)
+- inet_pton/ntop(IPv6)
+- DNS 조회
+- 역방향 조회
 
 ### 2) 전송 모드 테스트 (FIXED / VAR / MIX 비교)
-- FIXED: 정확한 N바이트 송신  
+- FIXED: 정확한 32바이트 송신  
 - VAR: '\n' 기준 메시지 구분  
 - MIX: 4바이트 길이 + 본문  
 
