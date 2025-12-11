@@ -21,7 +21,7 @@
 | 3 | IP 주소 변환 함수 | O |
 | 4 | DNS와 이름 변환 | O |
 | 5 | Server 상태 확인 | O |
-| 6 | netstat -a -n -p tcp | findstr 9000 | O |
+| 6 | netstat -a -n -p tcp \| findstr 9000 | O |
 | 7 | GUI TCP 서버 함수 상태 표시 | O |
 | 8 | TCP 클라이언트 함수 상태 표시 | O |
 | 9 | 소켓 데이터 구조체(버퍼) 상태 표시 | O |
@@ -47,10 +47,17 @@ Ubuntu 및 macOS 환경:
 python3 smart_net_suite.py
 ```
 
-필수 라이브러리(Ubuntu 기준):
+사전 작업(Ubuntu 기준):
 ```bash
-pip install requests
+# tkinter 설치
+sudo apt-get update
 sudo apt-get install python3-tk
+
+# requests 라이브러리 설치
+pip install requests
+
+# REST API와 함께 Ryu 실행
+ryu-manager ryu.app.ofctl_rest
 ```
 
 ---
@@ -70,7 +77,26 @@ sudo apt-get install python3-tk
 ### 2) 전송 모드 테스트 (FIXED / VAR / MIX 비교)
 - FIXED: 정확한 32바이트 송신  
 - VAR: '\n' 기준 메시지 구분  
-- MIX: 4바이트 길이 + 본문  
+- MIX: 4바이트 길이 + 본문
+
+### 3) 멀티 스레드 동작 (클라이언트당 스레드 + 공유 카운터)
+- 서버는 클라이언트마다 독립적인 스레드를 생성해 병렬로 수신 처리
+- 공유 카운터 접근 시 threading.Lock()을 사용해 임계영역 충돌 방지
+- 여러 클라이언트가 동시에 송신해도 카운터 정확히 증가
+- 서버 탭 내에서 상태 갱신 버튼을 클릭해 접속 수 및 카운터 확인 
+- 스레드 종료 시 threading.Event()으로 안전 종료
+
+### 4) 네트워크 그림판 (브로드캐스트)
+- `DRAW x1 y1 x2 y2` 패킷 생성 후 서버에 전송
+- 서버는 모든 클라이언트에게 브로드캐스트
+- 클라이언트는 수신한 패킷을 기반으로 렌더링하여 화면 동기화
+- 브로드캐스트 옵션을 사용해 화면 동기화 여부 제어 가능
+
+### 5) SFC(Ryu)
+- h1 → fw → nat → h2 플로우 체인을 REST API로 설치
+- h1 → h2 바이패스 플로우 설치로 서비스 펑션 우회
+- GET /stats/flow/{dpid}로 현재 플로우 테이블 조회
+- DELETE /stats/flowentry/clear/{dpid}로 모든 플로우 삭제
 
 ---
 
