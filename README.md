@@ -176,17 +176,15 @@ FIXED / VAR / MIX 모드를 테스트하는 공간
 ---
 
 ## 🟫 5. SFC(Ryu)
-sfc_install()  # h1->fw->nat->h2 체인 설치
-sfc_bypass()   # h1->h2 바이패스 설치
-sfc_dump()     # 플로우 조회
-sfc_clear()    # 플로우 삭제
 
 📸 스크린샷  
-![Log Tab](images/log_tab.png)
+![SFC](SFC.png)
 
 설명
-- 포트 점유, 연결 종료 등 확인 가능  
-- 디버깅 필수 탭  
+- sfc_install()  # h1->fw->nat->h2 체인 설치
+- sfc_bypass()   # h1->h2 바이패스 설치
+- sfc_dump()     # 플로우 조회
+- sfc_clear()    # 플로우 삭제
 
 ---
 
